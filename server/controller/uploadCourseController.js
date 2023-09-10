@@ -2,11 +2,11 @@ const catchAsyncError = require("../middleware/catchAsyncErrors");
 const fs = require("fs");
 const ErrorHandler = require("../utils/ErrorHandler");
 const ContentModel = require("../model/Content");
-const CourseDes = require("../model/CourseDes");
-const CourseSection = require("../model/CourseSection");
+const CourseDesModel = require("../model/CourseDes");
+const CourseSectionModel = require("../model/CourseSection");
 var currentPath = process.cwd();
 const { getVideoDurationInSeconds } = require("get-video-duration");
-var mongoose = require('mongoose')
+var mongoose = require("mongoose");
 
 exports.addCourse = catchAsyncError(async (req, res, next) => {
   const {
@@ -20,7 +20,7 @@ exports.addCourse = catchAsyncError(async (req, res, next) => {
     discount,
   } = req.body;
   try {
-    const data = await CourseDes.create({
+    const data = await CourseDesModel.create({
       title: title,
       category: category,
       subtitle: subtitle,
@@ -31,7 +31,6 @@ exports.addCourse = catchAsyncError(async (req, res, next) => {
       requirenments: requirenments,
       instructorId: "64e6727698ed7e98ee9f48ee",
     });
-
 
     res.status(201).json({
       success: true,
@@ -48,15 +47,15 @@ exports.addCourse = catchAsyncError(async (req, res, next) => {
 });
 
 exports.uploadContent = catchAsyncError(async (req, res, next) => {
-  const { size, filename, originalname, path } = req.file;
+  const { size, filename, originalname, path,order } = req.file;
   const { sectionId, type } = req.body;
   let duration;
   await getVideoDurationInSeconds(path).then((frametime) => {
     duration = frametime;
   });
 
-
   try {
+    const length= await ContentModel.count();
     const data = await ContentModel.create({
       content: filename,
       name: originalname,
@@ -64,10 +63,13 @@ exports.uploadContent = catchAsyncError(async (req, res, next) => {
       sectionId: sectionId,
       size: size,
       type: type,
+      order: length
     });
 
-      await CourseSection.findOneAndUpdate({_id:sectionId},
-      {$push:{content: data._id}})
+    await CourseSectionModel.findOneAndUpdate(
+      { _id: sectionId },
+      { $push: { content: data._id } }
+    );
 
     res.status(201).json({
       success: true,
@@ -82,10 +84,37 @@ exports.uploadContent = catchAsyncError(async (req, res, next) => {
   }
 });
 
+exports.updateContent = catchAsyncError(async (req, res, next) => {
+
+  // print the req data
+
+  const data=req.body;
+  try {
+    
+   const updated= data.map(async (item) => {
+      await ContentModel.findByIdAndUpdate({_id: item._id},{order:item.order})
+  })
+
+  res.status(201).json({
+    success: true,
+    message: `Repository updated`,
+    updated
+    
+  });
+    
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: `Repository failed `,
+      error: error
+    });
+  }
+
+})
+
 exports.getFile = catchAsyncError(async (req, res, next) => {
   try {
     const { sectionId } = req.params;
-  
 
     const data = await ContentModel.find({
       sectionId: sectionId,
@@ -103,7 +132,6 @@ exports.deleteContent = catchAsyncError(async (req, res, next) => {
     // delete from disl storage
     const directoryPath = currentPath + "/uploads/content/";
     await ContentModel.findByIdAndDelete(id).then((res) => {
-    
       fs.unlinkSync(directoryPath + res.content);
     });
     res.status(201).json({
@@ -116,7 +144,7 @@ exports.deleteContent = catchAsyncError(async (req, res, next) => {
 exports.addCoursesection = catchAsyncError(async (req, res, next) => {
   const { title, description, courseId } = req.body;
   try {
-    const data = await CourseSection.create({
+    const data = await CourseSectionModel.create({
       title: title,
       description: description,
       courseId: courseId,
@@ -140,87 +168,42 @@ exports.addCoursesection = catchAsyncError(async (req, res, next) => {
 exports.getSections = catchAsyncError(async (req, res, next) => {
   const { courseId } = req.params;
   try {
-
-    // const data= await CourseSection.find({
-    //   'courseId':courseId 
-    // }).populate({
-    //   path:'content'
-    // }).then(async(res)=>{
-    //   console.log(res)
-    //  const totalDuration= await ContentModel.aggregate([
-    //     {
-    //     $match: { "sectionId":(res._id) }
-    //   },
-    // ])
-
-    // return totalDuration
-    // })
-  //   const data= await CourseSection.find({'courseId':courseId }
-  //   , function(err, data) {
-      
-  //     return data
-     
-  // });
-  
-
-// 
-  
-    const data = await CourseSection.aggregate([
+    const data = await CourseSectionModel.aggregate([
       {
-        $match: { "courseId":new mongoose.Types.ObjectId(courseId) }
+        $match: { courseId: new mongoose.Types.ObjectId(courseId) },
       },
       {
-      $lookup:{
-        from:'Content',
-        localField: "_id",
-        foreignField: "sectionId",
-        as:"Sections"
-      }
-    },
-    {
-      "$addFields":{
-        "duration":{
-          "$sum":'Sections.duration'
-        }
-      }
-    }
-  ])
+        $project: {
+          _id: {
+            $toObjectId: "$_id",
+          },
+          title: 1,
+          description: 1,
+        },
+      },
 
-  // const data= await ContentModel.aggregate([
-  //   {
-  //     $match:{'type':"video"}
-  //   },
-  //   {
-  //     $lookup:{
-  //       from:'coursesections',
-  //       localField:"sectionId",
-  //       foreignField:'_id',
-  //       as:"Sections"
-  //     }
-  //   }
-  // ])
-    
-    
-    // .aggregate({
-    //   $lookup:{
-    //     from:ContentModel,
-    //     localField: "_id",
-    //     foreignField: "sectionId",
-    //     as:"Sections"
-
-    //   }
-    // })
-    // .populate({
-    //   path:"content"
-    // })
-  
+      {
+        $lookup: {
+          from: "contents",
+          localField: "_id",
+          foreignField: "sectionId",
+          as: "Sections",
+        },
+      },
+      {
+        $addFields: {
+          totalDuration: {
+            $sum: "$Sections.duration",
+          },
+        },
+      },
+    ]);
 
     res.status(201).json({
       success: true,
       message: "Section Fetched successfully",
       // length:data.length,
       data,
-      
     });
   } catch (error) {
     console.log(error);
@@ -228,6 +211,79 @@ exports.getSections = catchAsyncError(async (req, res, next) => {
       success: true,
       message: "Section Factory Failed",
       error: error.message,
+    });
+  }
+});
+
+// Steps
+// filtering Data
+// Query Content
+// get total Duration
+
+exports.fetchSections = catchAsyncError(async (req, res, next) => {
+  const { courseId } = req.params;
+
+  try {
+    const outData = await CourseSectionModel.find().then((items, index) => {
+      const sections = items.filter(
+        (item) => String(item.courseId) === String(courseId)
+      );
+
+      const d = sections.map(
+        (content, index) => console.log(content._id)
+        //      ContentModel.aggregate([
+
+        //   {
+        //     $match: { "sectionId":new mongoose.Types.ObjectId(content._id) }
+        //   },
+        //   // {
+        //   //   $group:{
+        //   //     _id:null,
+        //   //     totalDuration:{
+        //   //       $sum:'$duration'
+        //   //     }
+        //   //   }
+        //   // }
+
+        //  ])
+      );
+
+      // console.log(d)
+      // data.map(content,index=>
+      // console.log(content)
+      //   ContentModel.aggregate([
+
+      //   {
+      //     $match: { "sectionId":new mongoose.Types.ObjectId(content._id) }
+      //   },
+      //   {
+      //     $group:{
+      //       _id:null,
+      //       totalDuration:{
+      //         $sum:'$duration'
+      //       }
+      //     }
+      //   }
+
+      //  ])
+      // )
+
+      //  return newData
+    });
+    // console.log(outData)
+
+    res.status(201).json({
+      success: true,
+      message: "Section Fetched",
+      // length:data.length,
+      outData,
+    });
+  } catch (error) {
+    res.status(201).json({
+      success: true,
+      message: "Section Fetched Failed",
+      // length:data.length,
+      error,
     });
   }
 });

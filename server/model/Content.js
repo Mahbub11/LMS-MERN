@@ -7,13 +7,17 @@ const FilecontentSchema = new mongoose.Schema(
         required: true
     },
     sectionId:{
-      type: mongoose.Types.ObjectId,
+      type: mongoose.Schema.ObjectId,
       required: true
   },
   duration:{
     type:Number,
     required:true
   },
+    order:{
+      type:Number,
+      required:true
+    },
   size:{
     type: Number,
     required: true
