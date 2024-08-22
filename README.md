@@ -16,10 +16,9 @@
 
 ## About The Project
 
-![LMS Overview](images/course_des.png) 
-![Screenshot](course_video_list.png)
-![Screenshot](images/course_des.png)
-![Screenshot](images/add_course_video.png)
+![Screenshot](Images/course_video_list.png)
+![Screenshot](Images/course_des.png)
+![Screenshot](Images/add_course_video.png)
 
 ## Overview
 
